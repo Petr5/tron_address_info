@@ -6,8 +6,6 @@ from datetime import datetime
 from pydantic import BaseModel
 from tronpy import Tron
 
-# from tronpy.keys import to_base58
-
 DATABASE_URL = "sqlite:///./test.db"
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
