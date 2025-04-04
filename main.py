@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy import create_engine, Column, Integer, String, DateTime
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
 from pydantic import BaseModel
 from tronpy import Tron
-from tronpy.keys import to_base58
+
+# from tronpy.keys import to_base58
 
 DATABASE_URL = "sqlite:///./test.db"
 
@@ -55,15 +56,14 @@ def fetch_tron_address(data: AddressRequestSchema, db: Session = Depends(get_db)
         account_info = tron_client.get_account(address)
         resources = tron_client.get_account_resource(address)
 
-        trx_balance = str(account_info.get("balance", 0) / 1_000_000)  # Convert from Sun to TRX
+        trx_balance = str(
+            account_info.get("balance", 0) / 1_000_000
+        )  # Convert from Sun to TRX
         bandwidth = str(resources.get("freeNetUsed", 0))
         energy = str(resources.get("EnergyUsed", 0))
 
         new_request = AddressRequest(
-            address=address,
-            trx_balance=trx_balance,
-            bandwidth=bandwidth,
-            energy=energy
+            address=address, trx_balance=trx_balance, bandwidth=bandwidth, energy=energy
         )
         db.add(new_request)
         db.commit()
@@ -75,6 +75,12 @@ def fetch_tron_address(data: AddressRequestSchema, db: Session = Depends(get_db)
 
 @app.get("/addresses/")
 def get_address_requests(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    records = db.query(AddressRequest).order_by(AddressRequest.timestamp.desc()).offset(skip).limit(limit).all()
+    records = (
+        db.query(AddressRequest)
+        .order_by(AddressRequest.timestamp.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
     total = db.query(AddressRequest).count()
     return {"total": total, "items": records}
