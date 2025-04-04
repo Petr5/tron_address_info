@@ -3,8 +3,9 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from tronpy import Tron
+from typing import List, Generator
 
 DATABASE_URL = "sqlite:///./test.db"
 
@@ -30,16 +31,30 @@ class AddressRequest(Base):
 Base.metadata.create_all(bind=engine)
 
 
+# Pydantic модель для ответа
+class AddressRequestResponseSchema(BaseModel):
+    address: str
+    trx_balance: str
+    bandwidth: str
+    energy: str
+    timestamp: datetime
+
+    # Обновляем конфигурацию для Pydantic V2
+    model_config = ConfigDict(
+        from_attributes=True
+    )  # Заменили orm_mode на from_attributes
+
+
 class AddressRequestSchema(BaseModel):
     address: str
 
 
 class PaginatedResponse(BaseModel):
     total: int
-    items: list[AddressRequestSchema]
+    items: List[AddressRequestResponseSchema]
 
 
-def get_db():
+def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
@@ -47,8 +62,10 @@ def get_db():
         db.close()
 
 
-@app.post("/address/")
-def fetch_tron_address(data: AddressRequestSchema, db: Session = Depends(get_db)):
+@app.post("/address/", response_model=AddressRequestResponseSchema)
+def fetch_tron_address(
+    data: AddressRequestSchema, db: Session = Depends(get_db)
+) -> AddressRequestResponseSchema:
     try:
         address = data.address
         account_info = tron_client.get_account(address)
@@ -66,13 +83,17 @@ def fetch_tron_address(data: AddressRequestSchema, db: Session = Depends(get_db)
         db.add(new_request)
         db.commit()
         db.refresh(new_request)
+
+        # Возвращаем Pydantic модель, которая будет сериализована
         return new_request
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.get("/addresses/")
-def get_address_requests(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
+@app.get("/addresses/", response_model=PaginatedResponse)
+def get_address_requests(
+    skip: int = 0, limit: int = 10, db: Session = Depends(get_db)
+) -> PaginatedResponse:
     records = (
         db.query(AddressRequest)
         .order_by(AddressRequest.timestamp.desc())
